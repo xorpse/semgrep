@@ -23,6 +23,7 @@
     osemgrep_cli_test
     osemgrep_configuring
     osemgrep_cli_mcp
+    osemgrep_cli_scan_server
 
     ; reusing code from Core_cli
     semgrep_core_cli

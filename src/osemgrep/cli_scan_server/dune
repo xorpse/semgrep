@@ -1,0 +1,39 @@
+; OCaml implementation of the 'semgrep serve' subcommand.
+; A concurrent JSON-RPC server for in-memory code scanning.
+
+(library
+  (public_name semgrep.osemgrep_cli_scan_server)
+  (name osemgrep_cli_scan_server)
+  (wrapped false)
+  (libraries
+    ; External libraries
+    cmdliner
+    logs
+    eio
+    eio_main
+    eio.unix
+    yojson
+
+    ; Internal libraries
+    commons
+    parallelism
+
+    ; Semgrep core
+    semgrep_parsing
+    semgrep_targeting
+    semgrep.engine
+    semgrep.core_scan
+    semgrep.rule
+
+    ; Osemgrep
+    semgrep.osemgrep_core
+    semgrep.osemgrep_networking
+    semgrep.osemgrep_configuring
+  )
+ (preprocess
+   (pps
+     ppx_profiling
+     ppx_deriving.show
+   )
+ )
+)

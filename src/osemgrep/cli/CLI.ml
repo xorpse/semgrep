@@ -134,6 +134,7 @@ let known_subcommands =
     "validate";
     (* EXPERIMENTAL: *)
     "mcp";
+    "serve";
   ]
 
 let dispatch_subcommand (caps : caps) (argv : string array) =
@@ -211,6 +212,8 @@ let dispatch_subcommand (caps : caps) (argv : string array) =
         | "show" -> (Hook.get hook_semgrep_show) caps subcmd_argv
         | "test" -> Test_subcommand.main caps subcmd_argv
         | "validate" -> Validate_subcommand.main caps subcmd_argv
+        | "serve" when experimental -> Scan_server_subcommand.main caps subcmd_argv
+        | "serve" -> raise Pysemgrep.Fallback
         | _ ->
             if experimental then
               (* this should never happen because we default to 'scan',
