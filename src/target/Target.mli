@@ -34,7 +34,13 @@ type path = {
           be the same as the origin, if the origin is a path to a regular file
           (or an absolute path to the same), or it could be a tempfile. This
           should be used to obtain the contents of the target, but not for
-          reporting to the user, other than possibly for debugging purposes. *)
+          reporting to the user, other than possibly for debugging purposes.
+          For in-memory targets, this is a "virtual" path used for token
+          locations and error reporting. *)
+  content : string option;
+      (** In-memory content, if any. When [Some], this content should be used
+          instead of reading from [internal_path_to_content]. This enables
+          scanning content without requiring files on disk. *)
 }
 [@@deriving show, eq]
 (** Information about where a target from for both the purpose of
@@ -113,6 +119,12 @@ val mk_unfilterable_target : Analyzer.t -> Fpath.t -> t
 
 (* useful in tests *)
 val mk_unfilterable_lang_target : Lang.t -> Fpath.t -> t
+
+(** [mk_in_memory_target ~name ~content analyzer] creates a target for
+    in-memory content [content] with the given [name] (used for reporting)
+    and [analyzer] (language to use for parsing). This enables scanning
+    content without requiring files on disk. *)
+val mk_in_memory_target : name:string -> content:string -> Analyzer.t -> t
 
 (*****************************************************************************)
 (* Semgrep_output_v1.target -> Target.t *)

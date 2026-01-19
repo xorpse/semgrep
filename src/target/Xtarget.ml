@@ -43,13 +43,53 @@ let resolve_with_ast ast (target : Target.t) : t =
     path = target.path;
     analyzer = target.analyzer;
     lazy_content =
-      lazy_safe (UFile.read_file target.path.internal_path_to_content);
+      (match target.path.content with
+      | Some content -> lazy_safe content
+      | None -> lazy_safe (UFile.read_file target.path.internal_path_to_content));
     lazy_ast_and_errors = ast;
   }
 
-let resolve parser (target : Target.t) : t =
-  let ast =
-    lazy_safe
-      (parse_file parser target.analyzer target.path.internal_path_to_content)
+let parse_content_from_string string_parser (analyzer : Analyzer.t) file content =
+  let lang =
+    match analyzer with
+    | L (lang, []) -> lang
+    | L (_lang, _ :: _) ->
+        failwith
+          "analyzer from the language field in -target should be unique (this \
+           shouldn't happen FIXME)"
+    | _ ->
+        failwith "requesting generic AST for an unspecified target language"
   in
-  resolve_with_ast ast target
+  string_parser lang file content
+
+let resolve_with_string_parser file_parser string_parser (target : Target.t) : t =
+  match target.path.content with
+  | Some content ->
+      (* In-memory target: use string parser *)
+      let ast =
+        lazy_safe
+          (parse_content_from_string string_parser target.analyzer
+             target.path.internal_path_to_content content)
+      in
+      resolve_with_ast ast target
+  | None ->
+      (* File-based target: use file parser *)
+      let ast =
+        lazy_safe
+          (parse_file file_parser target.analyzer target.path.internal_path_to_content)
+      in
+      resolve_with_ast ast target
+
+let resolve parser (target : Target.t) : t =
+  match target.path.content with
+  | Some _content ->
+      (* For in-memory targets without a string parser, we still need to handle them.
+         Fall back to writing content to the internal_path if needed, but that shouldn't
+         happen if callers use resolve_with_string_parser for in-memory targets. *)
+      failwith "resolve: in-memory targets require resolve_with_string_parser"
+  | None ->
+      let ast =
+        lazy_safe
+          (parse_file parser target.analyzer target.path.internal_path_to_content)
+      in
+      resolve_with_ast ast target

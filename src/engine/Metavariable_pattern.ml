@@ -320,6 +320,7 @@ let get_nested_metavar_pattern_bindings get_nested_formula_matches env r mvar
                                 {
                                   origin = Unfilterable_target_file mval_file;
                                   internal_path_to_content = file;
+                                  content = None;
                                 };
                               analyzer;
                               lazy_ast_and_errors;

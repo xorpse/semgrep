@@ -654,6 +654,7 @@ let tainting_test (lang : Lang.t) (rules_file : Fpath.t) (file : Fpath.t) =
                  {
                    origin = Unfilterable_target_file file;
                    internal_path_to_content = file;
+                   content = None;
                  };
                analyzer = Analyzer.L (lang, []);
                lazy_content = lazy_safe (UFile.read_file file);

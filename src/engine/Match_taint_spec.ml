@@ -265,6 +265,7 @@ let raw_spec_matches_of_taint_rule ~per_file_formula_cache xconf file
         {
           origin = Unfilterable_target_file file;
           internal_path_to_content = file;
+          content = None;
         };
       analyzer = rule.target_analyzer;
       lazy_content = lazy_safe (UFile.read_file file);

@@ -85,6 +85,7 @@ let (matches_of_matcher :
                                 {
                                   internal_path_to_content = internal_path;
                                   origin;
+                                  content = None;
                                 };
                               range_loc = (loc1, loc2);
                               env;

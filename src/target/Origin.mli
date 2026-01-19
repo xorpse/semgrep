@@ -93,6 +93,17 @@ type t =
 
               This is used for e.g., a rule's path-based include & excludes. *)
     }
+  | In_memory of {
+      name : string;
+          (** A user-facing name for this in-memory content (e.g., "test.py").
+              This is used for reporting findings to users. *)
+      content : string;
+          (** The actual content to be scanned. This is stored here so that
+              the content doesn't need to be read from disk. *)
+    }
+      (** In-memory content that is not backed by a file on disk. This enables
+          using Semgrep as a library for API/service integration and programmatic
+          batch scanning without requiring temp files. *)
 [@@deriving show, eq, ord]
 
 val to_string : t -> string

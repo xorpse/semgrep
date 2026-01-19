@@ -1,0 +1,1048 @@
+diff --git a/languages/bash/tree-sitter/Parse_bash_tree_sitter.ml b/languages/bash/tree-sitter/Parse_bash_tree_sitter.ml
+index 0ea97cbc9..303e9c33d 100644
+--- a/languages/bash/tree-sitter/Parse_bash_tree_sitter.ml
++++ b/languages/bash/tree-sitter/Parse_bash_tree_sitter.ml
+@@ -1748,6 +1748,21 @@ let parse file =
+       let tok = Tok.first_tok_of_file file in
+       program env ~tok cst)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_bash.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        {
++          H.file;
++          conv = H.line_col_to_pos_pattern contents;
++          extra = AST_bash.Program;
++        }
++      in
++      let tok = Tok.first_tok_of_file file in
++      program env ~tok cst)
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_bash.Parse.string str)
+diff --git a/languages/bash/tree-sitter/Parse_bash_tree_sitter.mli b/languages/bash/tree-sitter/Parse_bash_tree_sitter.mli
+index 20627f222..8790e934f 100644
+--- a/languages/bash/tree-sitter/Parse_bash_tree_sitter.mli
++++ b/languages/bash/tree-sitter/Parse_bash_tree_sitter.mli
+@@ -24,5 +24,9 @@ type env = AST_bash.input_kind Parse_tree_sitter_helpers.env
+ val program : env -> tok:Tok.t -> Tree_sitter_bash.CST.program -> AST_bash.blist
+ val parse : Fpath.t -> (AST_bash.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_bash.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_bash.program, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/cairo/generic/Parse_cairo_tree_sitter.ml b/languages/cairo/generic/Parse_cairo_tree_sitter.ml
+index 992ddb992..04bb16c52 100644
+--- a/languages/cairo/generic/Parse_cairo_tree_sitter.ml
++++ b/languages/cairo/generic/Parse_cairo_tree_sitter.ml
+@@ -962,6 +962,18 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_cairo.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = Target }
++      in
++      match map_source_file env cst with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_expression_or_source_file str =
+   let res = Tree_sitter_cairo.Parse.string str in
+   match res.errors with
+diff --git a/languages/cairo/generic/Parse_cairo_tree_sitter.mli b/languages/cairo/generic/Parse_cairo_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/cairo/generic/Parse_cairo_tree_sitter.mli
++++ b/languages/cairo/generic/Parse_cairo_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/circom/generic/Parse_circom_tree_sitter.ml b/languages/circom/generic/Parse_circom_tree_sitter.ml
+index 5e836c658..015fd90a4 100644
+--- a/languages/circom/generic/Parse_circom_tree_sitter.ml
++++ b/languages/circom/generic/Parse_circom_tree_sitter.ml
+@@ -851,6 +851,18 @@ let parse file =
+           xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_circom.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      match map_source_file env cst with
++      | G.Pr xs
++      | G.Ss xs ->
++          xs
++      | _ -> failwith "not a program")
++
+ (* todo: special mode to convert Ellipsis in the right construct! *)
+ let parse_pattern str =
+   H.wrap_parser
+diff --git a/languages/circom/generic/Parse_circom_tree_sitter.mli b/languages/circom/generic/Parse_circom_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/circom/generic/Parse_circom_tree_sitter.mli
++++ b/languages/circom/generic/Parse_circom_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.ml b/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.ml
+index 0796c8b14..081f25597 100644
+--- a/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.ml
++++ b/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.ml
+@@ -5909,6 +5909,18 @@ let parse file =
+       | Left prog -> prog
+       | Right _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_cpp.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = () }
++      in
++      match map_program_or_expr env cst with
++      | Left prog -> prog
++      | Right _ -> failwith "not a program")
++
+ let parse_expression_or_source_file str =
+   let res = Tree_sitter_cpp.Parse.string str in
+   match res.errors with
+diff --git a/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.mli b/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.mli
+index 4df8d5dc9..be7081895 100644
+--- a/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.mli
++++ b/languages/cpp/tree-sitter/Parse_cpp_tree_sitter.mli
+@@ -12,5 +12,9 @@
+ *)
+ val parse : Fpath.t -> (Ast_cpp.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (Ast_cpp.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (Ast_cpp.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/csharp/generic/Parse_csharp_tree_sitter.ml b/languages/csharp/generic/Parse_csharp_tree_sitter.ml
+index bf73b402f..df2818b75 100644
+--- a/languages/csharp/generic/Parse_csharp_tree_sitter.ml
++++ b/languages/csharp/generic/Parse_csharp_tree_sitter.ml
+@@ -4401,6 +4401,16 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_c_sharp.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      match compilation_unit env cst with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_pattern_aux str =
+   (* ugly: coupling: see grammar.js of csharp.
+    * todo: will need to adjust position information in parsing errors! *)
+diff --git a/languages/csharp/generic/Parse_csharp_tree_sitter.mli b/languages/csharp/generic/Parse_csharp_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/csharp/generic/Parse_csharp_tree_sitter.mli
++++ b/languages/csharp/generic/Parse_csharp_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/dart/generic/Parse_dart_tree_sitter.ml b/languages/dart/generic/Parse_dart_tree_sitter.ml
+index 0728984be..b4bc3a799 100644
+--- a/languages/dart/generic/Parse_dart_tree_sitter.ml
++++ b/languages/dart/generic/Parse_dart_tree_sitter.ml
+@@ -4880,6 +4880,17 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_dart.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = Program } in
++      let any = map_program env cst in
++      match any with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ (* Cribbed from the Cairo parser. *)
+ let parse_expression_or_source_file str =
+   let res = Tree_sitter_dart.Parse.string str in
+diff --git a/languages/dart/generic/Parse_dart_tree_sitter.mli b/languages/dart/generic/Parse_dart_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/dart/generic/Parse_dart_tree_sitter.mli
++++ b/languages/dart/generic/Parse_dart_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.ml b/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.ml
+index 6353b20f3..acad7d659 100644
+--- a/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.ml
++++ b/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.ml
+@@ -1349,6 +1349,22 @@ let parse file =
+       in
+       source_file env cst)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () ->
++      contents |> ensure_trailing_newline
++      |> Tree_sitter_dockerfile.Parse.string ~src_file:file)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        {
++          H.file;
++          conv = H.line_col_to_pos_pattern contents;
++          extra = (AST_bash.Program, Sh);
++        }
++      in
++      source_file env cst)
++
+ let parse_pattern str =
+   let input_kind = AST_bash.Pattern in
+   H.wrap_parser
+diff --git a/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.mli b/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.mli
+index 28a8fa426..db424708c 100644
+--- a/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.mli
++++ b/languages/dockerfile/tree-sitter/Parse_dockerfile_tree_sitter.mli
+@@ -20,6 +20,10 @@
+ val parse :
+   Fpath.t -> (AST_dockerfile.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_dockerfile.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_dockerfile.program, unit) Tree_sitter_run.Parsing_result.t
+ 
+diff --git a/languages/go/tree-sitter/Parse_go_tree_sitter.ml b/languages/go/tree-sitter/Parse_go_tree_sitter.ml
+index f04eb73fe..5f7f2d57d 100644
+--- a/languages/go/tree-sitter/Parse_go_tree_sitter.ml
++++ b/languages/go/tree-sitter/Parse_go_tree_sitter.ml
+@@ -1848,3 +1848,14 @@ let parse file =
+       let env = { H.file; conv = H.line_col_to_pos file; extra = () } in
+       let x = source_file env cst in
+       x)
++
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_go.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = () }
++      in
++      let x = source_file env cst in
++      x)
+diff --git a/languages/go/tree-sitter/Parse_go_tree_sitter.mli b/languages/go/tree-sitter/Parse_go_tree_sitter.mli
+index a4f809a90..9347a91d1 100644
+--- a/languages/go/tree-sitter/Parse_go_tree_sitter.mli
++++ b/languages/go/tree-sitter/Parse_go_tree_sitter.mli
+@@ -11,3 +11,7 @@
+    LICENSE for more details.
+ *)
+ val parse : Fpath.t -> (Ast_go.program, unit) Tree_sitter_run.Parsing_result.t
++
++val parse_string :
++  file:string -> contents:string ->
++  (Ast_go.program, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/hack/generic/Parse_hack_tree_sitter.ml b/languages/hack/generic/Parse_hack_tree_sitter.ml
+index 09949e5b9..fb4172534 100644
+--- a/languages/hack/generic/Parse_hack_tree_sitter.ml
++++ b/languages/hack/generic/Parse_hack_tree_sitter.ml
+@@ -2953,6 +2953,18 @@ let parse file =
+            *)
+           Exception.reraise e)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_hack.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let extra = Target in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra } in
++      try script env cst with
++      | Failure "not implemented" as exn ->
++          let e = Exception.catch exn in
++          Exception.reraise e)
++
+ let parse_expression_or_source_file str =
+   let res = Tree_sitter_hack.Parse.string str in
+   match res.errors with
+diff --git a/languages/hack/generic/Parse_hack_tree_sitter.mli b/languages/hack/generic/Parse_hack_tree_sitter.mli
+index 844645858..a8a3f7e89 100644
+--- a/languages/hack/generic/Parse_hack_tree_sitter.mli
++++ b/languages/hack/generic/Parse_hack_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/html/generic/Parse_html_tree_sitter.ml b/languages/html/generic/Parse_html_tree_sitter.ml
+index f56bdb46a..b7bb91fd7 100644
+--- a/languages/html/generic/Parse_html_tree_sitter.ml
++++ b/languages/html/generic/Parse_html_tree_sitter.ml
+@@ -367,6 +367,26 @@ let parse file =
+       (* TODO? should convert in an XmlText? *)
+       | Right _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_html.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      match map_document env cst with
++      | Left xs ->
++          let xml =
++            {
++              xml_kind = XmlFragment (fake "", fake "");
++              xml_attrs = [];
++              xml_body = xs;
++            }
++          in
++          let e = Xml xml |> G.e in
++          let st = G.exprstmt e in
++          [ st ]
++      | Right _ -> failwith "not a program")
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_html.Parse.string str)
+diff --git a/languages/html/generic/Parse_html_tree_sitter.mli b/languages/html/generic/Parse_html_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/html/generic/Parse_html_tree_sitter.mli
++++ b/languages/html/generic/Parse_html_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/java/tree-sitter/Parse_java_tree_sitter.ml b/languages/java/tree-sitter/Parse_java_tree_sitter.ml
+index bc8bd1465..68640dfc5 100644
+--- a/languages/java/tree-sitter/Parse_java_tree_sitter.ml
++++ b/languages/java/tree-sitter/Parse_java_tree_sitter.ml
+@@ -2884,6 +2884,18 @@ let parse file =
+       | AProgram xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_java.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = () }
++      in
++      match program env file cst with
++      | AProgram xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_java.Parse.string str)
+diff --git a/languages/java/tree-sitter/Parse_java_tree_sitter.mli b/languages/java/tree-sitter/Parse_java_tree_sitter.mli
+index 63f3b83aa..17f100cb0 100644
+--- a/languages/java/tree-sitter/Parse_java_tree_sitter.mli
++++ b/languages/java/tree-sitter/Parse_java_tree_sitter.mli
+@@ -12,5 +12,9 @@
+ *)
+ val parse : Fpath.t -> (Ast_java.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (Ast_java.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (Ast_java.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.ml b/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.ml
+index 43f74e4c1..7c745901f 100644
+--- a/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.ml
++++ b/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.ml
+@@ -697,6 +697,17 @@ let parse file =
+       let e = map_document env cst in
+       e)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_jsonnet.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = () }
++      in
++      let e = map_document env cst in
++      e)
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_jsonnet.Parse.string str)
+diff --git a/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.mli b/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.mli
+index a9f7494ab..31ab73fd5 100644
+--- a/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.mli
++++ b/languages/jsonnet/tree-sitter/Parse_jsonnet_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_jsonnet.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_jsonnet.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_jsonnet.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/julia/generic/Parse_julia_tree_sitter.ml b/languages/julia/generic/Parse_julia_tree_sitter.ml
+index 2861790e8..3c91854f5 100644
+--- a/languages/julia/generic/Parse_julia_tree_sitter.ml
++++ b/languages/julia/generic/Parse_julia_tree_sitter.ml
+@@ -2403,6 +2403,14 @@ let parse file =
+       let env = { H.file; conv = H.line_col_to_pos file; extra = Program } in
+       map_source_file env cst)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_julia.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = Program } in
++      map_source_file env cst)
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_julia.Parse.string str)
+diff --git a/languages/julia/generic/Parse_julia_tree_sitter.mli b/languages/julia/generic/Parse_julia_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/julia/generic/Parse_julia_tree_sitter.mli
++++ b/languages/julia/generic/Parse_julia_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/kotlin/generic/Parse_kotlin_tree_sitter.ml b/languages/kotlin/generic/Parse_kotlin_tree_sitter.ml
+index f0fdae2b9..ac640800e 100644
+--- a/languages/kotlin/generic/Parse_kotlin_tree_sitter.ml
++++ b/languages/kotlin/generic/Parse_kotlin_tree_sitter.ml
+@@ -3020,6 +3020,16 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_kotlin.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = Program } in
++      match source_file env cst with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_expression_or_source_file str =
+   let res = Tree_sitter_kotlin.Parse.string str in
+   match res.errors with
+diff --git a/languages/kotlin/generic/Parse_kotlin_tree_sitter.mli b/languages/kotlin/generic/Parse_kotlin_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/kotlin/generic/Parse_kotlin_tree_sitter.mli
++++ b/languages/kotlin/generic/Parse_kotlin_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.ml b/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.ml
+index dc664e59c..3cdfdf68b 100644
+--- a/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.ml
++++ b/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.ml
+@@ -318,6 +318,15 @@ let parse file =
+       let x = map_source env cst in
+       [ x |> G.stmt_of_raw ])
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_clojure.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      let x = map_source env cst in
++      [ x |> G.stmt_of_raw ])
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_clojure.Parse.string str)
+diff --git a/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.mli b/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.mli
++++ b/languages/lisp/tree-sitter/Parse_clojure_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/lua/generic/Parse_lua_tree_sitter.ml b/languages/lua/generic/Parse_lua_tree_sitter.ml
+index 6eba32369..a384ad9b0 100644
+--- a/languages/lua/generic/Parse_lua_tree_sitter.ml
++++ b/languages/lua/generic/Parse_lua_tree_sitter.ml
+@@ -1078,6 +1078,14 @@ let parse file =
+ 
+       map_program env cst)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_lua.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      map_program env cst)
++
+ (* todo: special mode to convert Ellipsis in the right construct! *)
+ let parse_pattern str =
+   H.wrap_parser
+diff --git a/languages/lua/generic/Parse_lua_tree_sitter.mli b/languages/lua/generic/Parse_lua_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/lua/generic/Parse_lua_tree_sitter.mli
++++ b/languages/lua/generic/Parse_lua_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.ml b/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.ml
+index 3ea085dd5..9aee6ba5f 100644
+--- a/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.ml
++++ b/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.ml
+@@ -2724,6 +2724,16 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_move_on_aptos.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = Target } in
++      match map_source_file env cst with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_expression_or_source_file str =
+   Tree_sitter_move_on_aptos.Parse.string str
+ 
+diff --git a/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.mli b/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.mli
++++ b/languages/move_on_aptos/generic/Parse_move_on_aptos_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.ml b/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.ml
+index bfe45ae3f..68b7d6fe5 100644
+--- a/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.ml
++++ b/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.ml
+@@ -2983,6 +2983,16 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_move_on_sui.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = Target } in
++      match map_source_file env cst with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_expression_or_source_file str =
+   Tree_sitter_move_on_sui.Parse.string str
+ 
+diff --git a/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.mli b/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.mli
++++ b/languages/move_on_sui/generic/Parse_move_on_sui_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.ml b/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.ml
+index f1d42976c..d839c9348 100644
+--- a/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.ml
++++ b/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.ml
+@@ -4494,3 +4494,13 @@ let parse file =
+     (fun cst _extras ->
+       let env = { H.file; conv = H.line_col_to_pos file; extra = () } in
+       map_compilation_unit env cst)
++
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_ocaml.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = () }
++      in
++      map_compilation_unit env cst)
+diff --git a/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.mli b/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.mli
+index 9a51a18bd..b8034f71c 100644
+--- a/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.mli
++++ b/languages/ocaml/tree-sitter/Parse_ocaml_tree_sitter.mli
+@@ -12,3 +12,7 @@
+ *)
+ val parse :
+   Fpath.t -> (AST_ocaml.program, unit) Tree_sitter_run.Parsing_result.t
++
++val parse_string :
++  file:string -> contents:string ->
++  (AST_ocaml.program, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/php/tree-sitter/Parse_php_tree_sitter.ml b/languages/php/tree-sitter/Parse_php_tree_sitter.ml
+index af75bcf42..0020ec18b 100644
+--- a/languages/php/tree-sitter/Parse_php_tree_sitter.ml
++++ b/languages/php/tree-sitter/Parse_php_tree_sitter.ml
+@@ -2474,3 +2474,12 @@ let parse file =
+       let extra = () in
+       let env = { H.file; conv = H.line_col_to_pos file; extra } in
+       map_program env cst)
++
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_php.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let extra = () in
++      let env = { H.file; conv = H.line_col_to_pos_pattern contents; extra } in
++      map_program env cst)
+diff --git a/languages/php/tree-sitter/Parse_php_tree_sitter.mli b/languages/php/tree-sitter/Parse_php_tree_sitter.mli
+index fda9d321e..156be8487 100644
+--- a/languages/php/tree-sitter/Parse_php_tree_sitter.mli
++++ b/languages/php/tree-sitter/Parse_php_tree_sitter.mli
+@@ -11,3 +11,7 @@
+    LICENSE for more details.
+ *)
+ val parse : Fpath.t -> (Ast_php.program, unit) Tree_sitter_run.Parsing_result.t
++
++val parse_string :
++  file:string -> contents:string ->
++  (Ast_php.program, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/promql/generic/Parse_promql_tree_sitter.ml b/languages/promql/generic/Parse_promql_tree_sitter.ml
+index 3fedcfe9c..9768196df 100644
+--- a/languages/promql/generic/Parse_promql_tree_sitter.ml
++++ b/languages/promql/generic/Parse_promql_tree_sitter.ml
+@@ -402,6 +402,15 @@ let parse file =
+       let x = map_query env cst in
+       [ x |> G.exprstmt ])
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_promql.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      let x = map_query env cst in
++      [ x |> G.exprstmt ])
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_promql.Parse.string str)
+diff --git a/languages/promql/generic/Parse_promql_tree_sitter.mli b/languages/promql/generic/Parse_promql_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/promql/generic/Parse_promql_tree_sitter.mli
++++ b/languages/promql/generic/Parse_promql_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/protobuf/generic/Parse_protobuf_tree_sitter.ml b/languages/protobuf/generic/Parse_protobuf_tree_sitter.ml
+index fd2a6b73a..bffb44011 100644
+--- a/languages/protobuf/generic/Parse_protobuf_tree_sitter.ml
++++ b/languages/protobuf/generic/Parse_protobuf_tree_sitter.ml
+@@ -690,6 +690,16 @@ let parse file =
+       let st = G.stmt_of_raw raw in
+       [ st ])
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_proto.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      let raw = map_source_file env cst in
++      let st = G.stmt_of_raw raw in
++      [ st ])
++
+ (* todo: special mode to convert Ellipsis in the right construct! *)
+ let parse_pattern str =
+   H.wrap_parser
+diff --git a/languages/protobuf/generic/Parse_protobuf_tree_sitter.mli b/languages/protobuf/generic/Parse_protobuf_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/protobuf/generic/Parse_protobuf_tree_sitter.mli
++++ b/languages/protobuf/generic/Parse_protobuf_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/r/generic/Parse_r_tree_sitter.ml b/languages/r/generic/Parse_r_tree_sitter.ml
+index 2549fca6a..83e814aeb 100644
+--- a/languages/r/generic/Parse_r_tree_sitter.ml
++++ b/languages/r/generic/Parse_r_tree_sitter.ml
+@@ -597,6 +597,14 @@ let parse file =
+       let env = { H.file; conv = H.line_col_to_pos file; extra = () } in
+       map_program env cst)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_r.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      map_program env cst)
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_r.Parse.string str)
+diff --git a/languages/r/generic/Parse_r_tree_sitter.mli b/languages/r/generic/Parse_r_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/r/generic/Parse_r_tree_sitter.mli
++++ b/languages/r/generic/Parse_r_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.ml b/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.ml
+index 914b35225..da5619c9a 100644
+--- a/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.ml
++++ b/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.ml
+@@ -2492,6 +2492,16 @@ let parse file =
+       if debug then Boilerplate.dump_tree cst;
+       program env cst)
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_ruby.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = Program }
++      in
++      program env cst)
++
+ let parse_pattern string =
+   let debug = false in
+   H.wrap_parser
+diff --git a/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.mli b/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.mli
+index c99caafda..4029cd1ce 100644
+--- a/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.mli
++++ b/languages/ruby/tree-sitter/Parse_ruby_tree_sitter.mli
+@@ -12,5 +12,9 @@
+ *)
+ val parse : Fpath.t -> (Ast_ruby.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (Ast_ruby.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (Ast_ruby.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/rust/generic/Parse_rust_tree_sitter.ml b/languages/rust/generic/Parse_rust_tree_sitter.ml
+index 5ea773831..31dee6e6c 100644
+--- a/languages/rust/generic/Parse_rust_tree_sitter.ml
++++ b/languages/rust/generic/Parse_rust_tree_sitter.ml
+@@ -4676,6 +4676,16 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_rust.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = Target } in
++      match map_source_file env cst with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_expression_or_source_file str =
+   let res = Tree_sitter_rust.Parse.string str in
+   match res.errors with
+diff --git a/languages/rust/generic/Parse_rust_tree_sitter.mli b/languages/rust/generic/Parse_rust_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/rust/generic/Parse_rust_tree_sitter.mli
++++ b/languages/rust/generic/Parse_rust_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/solidity/generic/Parse_solidity_tree_sitter.ml b/languages/solidity/generic/Parse_solidity_tree_sitter.ml
+index f025433ff..b71db9207 100644
+--- a/languages/solidity/generic/Parse_solidity_tree_sitter.ml
++++ b/languages/solidity/generic/Parse_solidity_tree_sitter.ml
+@@ -2514,6 +2514,18 @@ let parse file =
+           xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_solidity.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = () } in
++      match map_source_file env cst with
++      | G.Pr xs
++      | G.Ss xs ->
++          xs
++      | _ -> failwith "not a program")
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_solidity.Parse.string str)
+diff --git a/languages/solidity/generic/Parse_solidity_tree_sitter.mli b/languages/solidity/generic/Parse_solidity_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/solidity/generic/Parse_solidity_tree_sitter.mli
++++ b/languages/solidity/generic/Parse_solidity_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/swift/generic/Parse_swift_tree_sitter.ml b/languages/swift/generic/Parse_swift_tree_sitter.ml
+index 4f31ec448..3e32a9ff0 100644
+--- a/languages/swift/generic/Parse_swift_tree_sitter.ml
++++ b/languages/swift/generic/Parse_swift_tree_sitter.ml
+@@ -3309,6 +3309,16 @@ let parse file =
+       | G.Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_swift.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env = { H.file = file; conv = H.line_col_to_pos_pattern contents; extra = Program } in
++      match map_source_file env cst with
++      | G.Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_pattern str =
+   H.wrap_parser
+     (fun () -> Tree_sitter_swift.Parse.string str)
+diff --git a/languages/swift/generic/Parse_swift_tree_sitter.mli b/languages/swift/generic/Parse_swift_tree_sitter.mli
+index ca06bfc43..762cfda68 100644
+--- a/languages/swift/generic/Parse_swift_tree_sitter.mli
++++ b/languages/swift/generic/Parse_swift_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_generic.program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_generic.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.ml b/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.ml
+index 0b06af4e9..e27b34d86 100644
+--- a/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.ml
++++ b/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.ml
+@@ -638,6 +638,18 @@ let parse file =
+       | Pr xs -> xs
+       | _ -> failwith "not a program")
+ 
++let parse_string ~file ~contents =
++  H.wrap_parser
++    (fun () -> Tree_sitter_hcl.Parse.string ~src_file:file contents)
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = () }
++      in
++      match map_config_file env cst with
++      | Pr xs -> xs
++      | _ -> failwith "not a program")
++
+ let parse_expression_or_source_file str =
+   let res = Tree_sitter_hcl.Parse.string str in
+   match res.errors with
+diff --git a/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.mli b/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.mli
+index 7ab08c991..c07200c13 100644
+--- a/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.mli
++++ b/languages/terraform/tree-sitter/Parse_terraform_tree_sitter.mli
+@@ -13,5 +13,9 @@
+ val parse :
+   Fpath.t -> (AST_terraform.config, unit) Tree_sitter_run.Parsing_result.t
+ 
++val parse_string :
++  file:string -> contents:string ->
++  (AST_terraform.config, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (AST_terraform.any, unit) Tree_sitter_run.Parsing_result.t
+diff --git a/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.ml b/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.ml
+index ff77ccabd..3fe965137 100644
+--- a/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.ml
++++ b/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.ml
+@@ -4585,6 +4585,28 @@ let parse ?dialect file =
+       | Program p -> p
+       | _ -> failwith "not a program")
+ 
++let parse_string ~dialect ~file ~contents =
++  H.wrap_parser
++    (fun () ->
++      let dialect = guess_dialect (Some dialect) file in
++      match dialect with
++      | `Typescript ->
++          let cst =
++            Tree_sitter_typescript.Parse.string ~src_file:file contents
++          in
++          (cst :> cst_result)
++      | `TSX ->
++          let cst = Tree_sitter_tsx.Parse.string ~src_file:file contents in
++          (cst :> cst_result))
++    (fun cst _extras ->
++      let file = Fpath.v file in
++      let env =
++        { H.file; conv = H.line_col_to_pos_pattern contents; extra = Program }
++      in
++      match program env cst with
++      | Program p -> p
++      | _ -> failwith "not a program")
++
+ (* What's the deal with this?
+  *
+  * In the pattern-parsing world, we can either parse something which is a whole program,
+diff --git a/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.mli b/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.mli
+index 0858a081a..923b682a3 100644
+--- a/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.mli
++++ b/languages/typescript/tree-sitter/Parse_typescript_tree_sitter.mli
+@@ -32,5 +32,15 @@ val parse :
+   Fpath.t ->
+   (Ast_js.a_program, unit) Tree_sitter_run.Parsing_result.t
+ 
++(*
++   Parse a string as pure typescript or as TSX.
++   Dialect must be specified for string parsing.
++*)
++val parse_string :
++  dialect:dialect ->
++  file:string ->
++  contents:string ->
++  (Ast_js.a_program, unit) Tree_sitter_run.Parsing_result.t
++
+ val parse_pattern :
+   string -> (Ast_js.any, unit) Tree_sitter_run.Parsing_result.t

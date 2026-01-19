@@ -260,11 +260,13 @@ let filter_existing_targets (targets : Target.t list) :
   targets
   |> Either_.partition (fun (target : Target.t) ->
          let internal_path = Target.internal_path target in
-         if Sys_.Fpath.exists internal_path then Left target
-         else
-           match Target.origin target with
-           | Unfilterable_target_file path
-           | Target_file { fpath = path; _ } ->
+         match Target.origin target with
+         (* In-memory targets always exist - content is in memory *)
+         | In_memory _ -> Left target
+         | Unfilterable_target_file path
+         | Target_file { fpath = path; _ } ->
+             if Sys_.Fpath.exists internal_path then Left target
+             else (
                Logs.warn (fun m -> m "skipping %s which does not exist" !!path);
                Right
                  {
@@ -272,8 +274,10 @@ let filter_existing_targets (targets : Target.t list) :
                    reason = Nonexistent_file;
                    details = Some "File does not exist";
                    rule_id = None;
-                 }
-           | Git_blob { sha; _ } ->
+                 })
+         | Git_blob { sha; _ } ->
+             if Sys_.Fpath.exists internal_path then Left target
+             else
                Right
                  {
                    Semgrep_output_v1_t.path = Target.internal_path target;
@@ -390,6 +394,18 @@ let parse_and_resolve_name (lang : Lang.t) (fpath : Fpath.t) :
             m "Parsing (and naming) %s (with lang %s)" !!fpath
               (Lang.to_string lang));
         Parse_target.parse_and_resolve_name lang fpath)
+  in
+  (ast, skipped_tokens)
+
+(* String-based version for in-memory targets *)
+let parse_and_resolve_name_from_string (lang : Lang.t) (fpath : Fpath.t)
+    (content : string) : AST_generic.program * Tok.location list =
+  let { Parsing_result2.ast; skipped_tokens; _ } =
+    Logs_.with_debug_trace ~__FUNCTION__ (fun () ->
+        Logs.debug (fun m ->
+            m "Parsing (and naming) in-memory %s (with lang %s)"
+              (Fpath.to_string fpath) (Lang.to_string lang));
+        Parse_target.parse_and_resolve_name_from_string lang fpath content)
   in
   (ast, skipped_tokens)
 
@@ -825,6 +841,10 @@ let origin_satisfy_paths_filter (origin : Origin.t)
       target_paths
       |> List.exists (fun (_, (path_at_commit : Fppath.t)) ->
              Filter_target.filter_paths path_filter path_at_commit)
+  | In_memory { name; _ } ->
+      (* For in-memory targets, use the name as the path for filtering *)
+      Filter_target.filter_paths path_filter
+        (Fppath.of_relative_fpath_exn (Fpath.v name))
 
 (* This is also used by semgrep-proprietary. *)
 (* TODO: reduce memory allocation by using only one call to List.filter?
@@ -905,7 +925,11 @@ let mk_target_handler (caps : < Cap.time_limit >) (config : Core_scan_config.t)
 
   (* TODO: can we skip all of this if there are no applicable
           rules? In particular, can we skip print_cli_progress? *)
-  let xtarget = Xtarget.resolve parse_and_resolve_name target in
+  (* Use resolve_with_string_parser to handle both file-based and in-memory targets *)
+  let xtarget =
+    Xtarget.resolve_with_string_parser parse_and_resolve_name
+      parse_and_resolve_name_from_string target
+  in
   let matches : Core_result.matches_single_file =
     match_rules caps ~matches_hook:Fun.id config prefilter_policy rules xtarget
   in
@@ -1017,6 +1041,7 @@ let post_process_matches (f : post_processor) (res : Core_result.t) :
                    | Target_file { fpath; _ } ->
                        Some fpath
                    | Git_blob _ -> None
+                   | In_memory { name; _ } -> Some (Fpath.v name)
                  in
                  let error = Core_error.exn_to_error ?file e in
                  (pm, [ error ])

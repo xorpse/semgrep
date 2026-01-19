@@ -29,6 +29,7 @@ type t =
       sha : Git_wrapper.hash;
       paths : (Git_wrapper.commit * Fppath.t) list;
     }
+  | In_memory of { name : string; content : string }
 [@@deriving show, eq, ord]
 
 (*****************************************************************************)
@@ -40,6 +41,7 @@ let to_string (s : t) =
   | Unfilterable_target_file path -> Fpath.to_string path
   | Target_file path -> Fpath.to_string path.fpath
   | Git_blob { sha; _ } -> sha |> Git_wrapper.hex_of_hash
+  | In_memory { name; _ } -> name
 
 let to_string_opt ?(unspecified = "unknown") (s : t option) =
   match s with

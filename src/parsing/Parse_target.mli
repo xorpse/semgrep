@@ -22,6 +22,15 @@ val parse_and_resolve_name : Lang.t -> Fpath.t -> Parsing_result2.t
 (* no naming, just parsing *)
 val just_parse_with_lang : Lang.t -> Fpath.t -> Parsing_result2.t
 
+(* Same as above, but for in-memory content (no file on disk).
+ * The Fpath.t argument is a "virtual" path used for error reporting and
+ * token locations. *)
+val parse_and_resolve_name_from_string :
+  Lang.t -> Fpath.t -> string -> Parsing_result2.t
+
+val just_parse_with_lang_from_string :
+  Lang.t -> Fpath.t -> string -> Parsing_result2.t
+
 (* typing, const-prop, implicit-return, etc *)
 val run_analyses_after_name_resolution : Lang.t -> AST_generic.program -> unit
 

@@ -19,6 +19,14 @@ type 'ast pattern_parser =
   | PfffPat of (string -> 'ast)
   | TreeSitterPat of (string -> ('ast, unit) Tree_sitter_run.Parsing_result.t)
 
+(* Parser types for string/in-memory content.
+   The string argument is the content, not a filename.
+   The Fpath.t argument is a "virtual" path used for error reporting. *)
+type 'ast str_parser =
+  | PfffStr of (Fpath.t -> string -> 'ast * Parsing_stat.t)
+  | TreeSitterStr of
+      (Fpath.t -> string -> ('ast, unit) Tree_sitter_run.Parsing_result.t)
+
 (* usage:
     run file [
         TreeSitter (Parse_typescript_tree_sitter.parse);
@@ -28,6 +36,21 @@ type 'ast pattern_parser =
 val run :
   Fpath.t ->
   'ast parser list ->
+  ('ast -> AST_generic.program) ->
+  Parsing_result2.t
+
+(* Like [run] but parses from a string instead of a file.
+   The Fpath.t argument is a "virtual" path used for error reporting/token locations.
+   usage:
+    run_from_string (Fpath.v "test.py") content [
+        TreeSitterStr (fun file content ->
+          Parse_python_tree_sitter.parse_string ~file:(Fpath.to_string file) ~contents:content);
+     ] Python_to_generic.program
+*)
+val run_from_string :
+  Fpath.t ->
+  string ->
+  'ast str_parser list ->
   ('ast -> AST_generic.program) ->
   Parsing_result2.t
 

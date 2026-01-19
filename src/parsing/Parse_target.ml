@@ -231,6 +231,193 @@ let just_parse_with_lang lang file : Parsing_result2.t =
   | Lang.Elixir -> run_external_parser file Parsing_plugin.Elixir.parse_target
   | Lang.Gosu -> run_external_parser file Parsing_plugin.Gosu.parse_target
 
+(* String-based parsing for in-memory content.
+ * The file argument is a "virtual" path used for error reporting.
+ * For languages with parse_string, we use native string parsing.
+ * For others, the scanning infrastructure will fail with an error.
+ *)
+let just_parse_with_lang_from_string lang file content : Parsing_result2.t =
+  begin
+    match lang with
+    | Lang.C when Sys_.Fpath.exists !Flag_parsing_cpp.macros_h ->
+        Parse_cpp.init_defs !Flag_parsing_cpp.macros_h
+    | _ -> ()
+  end;
+
+  (* Helper to create TreeSitterStr parser from a parse_string function *)
+  let ts_str file_to_string_parser =
+    TreeSitterStr (fun file content ->
+        file_to_string_parser ~file:(Fpath.to_string file) ~contents:content)
+  in
+
+  match lang with
+  (* Python *)
+  | Lang.Python
+  | Lang.Python2
+  | Lang.Python3 ->
+      run_from_string file content
+        [ ts_str Parse_python_tree_sitter.parse_string ]
+        Python_to_generic.program
+  (* QL *)
+  | Lang.Ql ->
+      run_from_string file content
+        [ ts_str Parse_ql_tree_sitter.parse_string ]
+        QL_to_generic.program
+  (* Go *)
+  | Lang.Go ->
+      run_from_string file content
+        [ ts_str Parse_go_tree_sitter.parse_string ]
+        Go_to_generic.program
+  (* Java *)
+  | Lang.Java ->
+      run_from_string file content
+        [ ts_str Parse_java_tree_sitter.parse_string ]
+        Java_to_generic.program
+  (* JavaScript/TypeScript *)
+  | Lang.Js ->
+      run_from_string file content
+        [
+          TreeSitterStr
+            (fun file content ->
+              Parse_typescript_tree_sitter.parse_string ~dialect:`TSX
+                ~file:(Fpath.to_string file) ~contents:content);
+        ]
+        Js_to_generic.program
+  | Lang.Ts ->
+      run_from_string file content
+        [
+          TreeSitterStr
+            (fun file content ->
+              Parse_typescript_tree_sitter.parse_string ~dialect:`Typescript
+                ~file:(Fpath.to_string file) ~contents:content);
+        ]
+        Js_to_generic.program
+  (* C/C++ *)
+  | Lang.C
+  | Lang.Cpp ->
+      run_from_string file content
+        [ ts_str Parse_cpp_tree_sitter.parse_string ]
+        Cpp_to_generic.program
+  (* Ruby *)
+  | Lang.Ruby ->
+      run_from_string file content
+        [ ts_str Parse_ruby_tree_sitter.parse_string ]
+        Ruby_to_generic.program
+  (* Bash *)
+  | Lang.Bash ->
+      run_from_string file content
+        [ ts_str Parse_bash_tree_sitter.parse_string ]
+        Bash_to_generic.program
+  (* Dockerfile *)
+  | Lang.Dockerfile ->
+      run_from_string file content
+        [ ts_str Parse_dockerfile_tree_sitter.parse_string ]
+        Dockerfile_to_generic.program
+  (* Jsonnet *)
+  | Lang.Jsonnet ->
+      run_from_string file content
+        [ ts_str Parse_jsonnet_tree_sitter.parse_string ]
+        Jsonnet_to_generic.program
+  (* Terraform *)
+  | Lang.Terraform ->
+      run_from_string file content
+        [ ts_str Parse_terraform_tree_sitter.parse_string ]
+        Terraform_to_generic.program
+  (* OCaml *)
+  | Lang.Ocaml ->
+      run_from_string file content
+        [ ts_str Parse_ocaml_tree_sitter.parse_string ]
+        Ocaml_to_generic.program
+  (* PHP *)
+  | Lang.Php ->
+      run_from_string file content
+        [ ts_str Parse_php_tree_sitter.parse_string ]
+        Php_to_generic.program
+  (* Languages that generate AST_generic directly (no xxx_to_generic) *)
+  | Lang.Cairo ->
+      run_from_string file content
+        [ ts_str Parse_cairo_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Dart ->
+      run_from_string file content
+        [ ts_str Parse_dart_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Hack ->
+      run_from_string file content
+        [ ts_str Parse_hack_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Html
+  | Lang.Xml ->
+      run_from_string file content
+        [ ts_str Parse_html_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Julia ->
+      run_from_string file content
+        [ ts_str Parse_julia_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Kotlin ->
+      run_from_string file content
+        [ ts_str Parse_kotlin_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Lisp
+  | Lang.Scheme
+  | Lang.Clojure ->
+      run_from_string file content
+        [ ts_str Parse_clojure_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Lua ->
+      run_from_string file content
+        [ ts_str Parse_lua_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Promql ->
+      run_from_string file content
+        [ ts_str Parse_promql_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Protobuf ->
+      run_from_string file content
+        [ ts_str Parse_protobuf_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Rust ->
+      run_from_string file content
+        [ ts_str Parse_rust_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Solidity ->
+      run_from_string file content
+        [ ts_str Parse_solidity_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Swift ->
+      run_from_string file content
+        [ ts_str Parse_swift_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.R ->
+      run_from_string file content
+        [ ts_str Parse_r_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Move_on_sui ->
+      run_from_string file content
+        [ ts_str Parse_move_on_sui_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Move_on_aptos ->
+      run_from_string file content
+        [ ts_str Parse_move_on_aptos_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Circom ->
+      run_from_string file content
+        [ ts_str Parse_circom_tree_sitter.parse_string ]
+        (fun x -> x)
+  | Lang.Csharp ->
+      run_from_string file content
+        [ ts_str Parse_csharp_tree_sitter.parse_string ]
+        (fun x -> x)
+  (* For languages without parse_string support yet, raise an error.
+   * Users should use file-based scanning for these languages. *)
+  | _ ->
+      failwith
+        (Printf.sprintf
+           "In-memory scanning not yet supported for language %s. Please use \
+            file-based scanning."
+           (Lang.to_string lang))
+
 let run_analyses_after_name_resolution lang ast =
   Typing.check_program lang ast;
 
@@ -245,6 +432,13 @@ let run_analyses_after_name_resolution lang ast =
 let just_resolve_name lang ast =
   Naming_AST.resolve lang ast;
   run_analyses_after_name_resolution lang ast
+
+let parse_and_resolve_name_from_string lang file content =
+  let res = just_parse_with_lang_from_string lang file content in
+  let ast = res.ast in
+  just_resolve_name lang ast;
+  Log.info (fun m -> m "Parse_target.parse_and_resolve_name_from_string done");
+  res
 
 let parse_and_resolve_name lang file =
   let res = just_parse_with_lang lang file in

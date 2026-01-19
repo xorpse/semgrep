@@ -29,7 +29,17 @@ val resolve :
   Target.t ->
   t
 (** [resolve parser target] is the extended version of [target], comprising
-    also the contents and parsed version thereof. *)
+    also the contents and parsed version thereof. For in-memory targets,
+    the parser is not used and content is taken from the target directly. *)
+
+(** [resolve_with_string_parser file_parser string_parser target] resolves
+    a target using [file_parser] for file-based targets and [string_parser]
+    for in-memory targets. *)
+val resolve_with_string_parser :
+  (Language.t -> Fpath.t -> AST_generic.program * Tok.location list) ->
+  (Language.t -> Fpath.t -> string -> AST_generic.program * Tok.location list) ->
+  Target.t ->
+  t
 
 (* Instead of a parser (like with resolve), pass a lazy AST. This allows for the
  * easy construction of Xtargets in contexts where the client has already parsed

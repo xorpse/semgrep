@@ -251,7 +251,7 @@ let matches_of_patterns ~has_as_metavariable ?mvar_context ?range_filter rule
     (patterns : (Pattern.t * bool * Xpattern.pattern_id * string) list) :
     Core_profiling.times Core_result.match_result =
   let {
-    path = { origin; internal_path_to_content };
+    path = { origin; internal_path_to_content; _ };
     analyzer;
     lazy_ast_and_errors;
     lazy_content = _;
@@ -517,6 +517,10 @@ let apply_as_on_ranges ranges as_ =
                  | Git_blob _, _ ->
                      Log.debug (fun m ->
                          m "unable to apply as operator to gitblob match");
+                     range.mvars
+                 | In_memory _, _ ->
+                     Log.debug (fun m ->
+                         m "unable to apply as operator to in-memory match");
                      range.mvars));
          })
 
@@ -528,7 +532,7 @@ let matches_of_xpatterns ~has_as_metavariable ~mvar_context rule
     (xconf : xconfig) (xtarget : Xtarget.t)
     (xpatterns : (Xpattern.t * bool) list) :
     Core_profiling.times Core_result.match_result =
-  let ({ path = { internal_path_to_content; origin }; lazy_content; _ }
+  let ({ path = { internal_path_to_content; origin; _ }; lazy_content; _ }
         : Xtarget.t) =
     xtarget
   in

@@ -23,7 +23,11 @@ module Out = Semgrep_output_v1_j
 (* Types *)
 (*****************************************************************************)
 
-type path = { origin : Origin.t; internal_path_to_content : Fpath.t }
+type path = {
+  origin : Origin.t;
+  internal_path_to_content : Fpath.t;
+  content : string option;
+}
 [@@deriving eq, ord, show]
 
 type t = {
@@ -76,10 +80,15 @@ let tempfile_of_git_blob sha =
 
 let path_of_origin (origin : Origin.t) : path =
   match origin with
-  | Unfilterable_target_file file -> { origin; internal_path_to_content = file }
-  | Target_file fppath -> { origin; internal_path_to_content = fppath.fpath }
+  | Unfilterable_target_file file ->
+      { origin; internal_path_to_content = file; content = None }
+  | Target_file fppath ->
+      { origin; internal_path_to_content = fppath.fpath; content = None }
   | Git_blob { sha; _ } ->
-      { origin; internal_path_to_content = tempfile_of_git_blob sha }
+      { origin; internal_path_to_content = tempfile_of_git_blob sha; content = None }
+  | In_memory { name; content } ->
+      (* Use the name as a virtual path for token locations *)
+      { origin; internal_path_to_content = Fpath.v name; content = Some content }
 
 (*****************************************************************************)
 (* Builders *)
@@ -106,6 +115,10 @@ let mk_unfilterable_target analyzer fpath =
 (* useful in test context or DeepScan context *)
 let mk_unfilterable_lang_target (lang : Lang.t) (file : Fpath.t) : t =
   mk_unfilterable_target (Analyzer.of_lang lang) file
+
+let mk_in_memory_target ~name ~content analyzer : t =
+  let origin = Origin.In_memory { name; content } in
+  mk_target_gen analyzer origin
 
 (*****************************************************************************)
 (* Semgrep_output_v1.target -> Target.t *)

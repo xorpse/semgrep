@@ -349,6 +349,9 @@ let path_and_historical (path : Target.path) ~(min_loc : Tok.location)
                      offset.minutes;
                }
                 : Out.historical_info) ))
+  | In_memory { name; _ } ->
+      (* For in-memory targets, use the name as the virtual path *)
+      (Fpath.v name, None)
 
 let sca_pattern_to_sca_pattern (pat : SCA_pattern.t) : Out.sca_pattern =
   let SCA_pattern.{ ecosystem; package_name = package; version_constraints } =

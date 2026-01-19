@@ -57,6 +57,12 @@ type 'ast pattern_parser =
   | PfffPat of (string -> 'ast)
   | TreeSitterPat of (string -> ('ast, unit) Tree_sitter_run.Parsing_result.t)
 
+(* Parser types for string/in-memory content *)
+type 'ast str_parser =
+  | PfffStr of (Fpath.t -> string -> 'ast * Parsing_stat.t)
+  | TreeSitterStr of
+      (Fpath.t -> string -> ('ast, unit) Tree_sitter_run.Parsing_result.t)
+
 (*****************************************************************************)
 (* Helpers *)
 (*****************************************************************************)
@@ -258,6 +264,139 @@ let (run :
     | () -> xs
   in
   match run_either file xs with
+  | ResOk (ast, stat, tolerable_errors) ->
+      Parsing_result2.ok (fconvert ast) stat tolerable_errors
+  | ResPartial (ast, stat, errors) ->
+      Parsing_result2.partial (fconvert ast) stat errors
+  | ResError e -> Exception.reraise e
+
+(*****************************************************************************)
+(* Similar to run, but for string/in-memory content *)
+(*****************************************************************************)
+
+let (run_str_parser : 'ast str_parser -> Fpath.t -> string -> 'ast internal_result)
+    =
+ fun parser file content ->
+  match parser with
+  | PfffStr f ->
+      Hook.with_hook_set Flag_parsing.show_parsing_error false (fun () ->
+          Log.info (fun m ->
+              m "trying to parse with Pfff parser (from string) %s"
+                (Fpath.to_string file));
+          try
+            let ast, stat = f file content in
+            ResOk (ast, stat, [])
+          with
+          | Time_limit.Timeout _ as e -> Exception.catch_and_reraise e
+          | exn ->
+              let e = Exception.catch exn in
+              Log.warn (fun m ->
+                  m "exn (%s) with Pfff parser (from string)"
+                    (Common.exn_to_s exn));
+              ResError e)
+  | TreeSitterStr f -> (
+      Log.info (fun m ->
+          m "trying to parse with TreeSitter parser (from string) %s"
+            (Fpath.to_string file));
+      try
+        let res = f file content in
+        let stat =
+          stat_of_tree_sitter_stat (Fpath.to_string file) res.stat
+        in
+        match (res.program, get_serious_error res) with
+        | None, None ->
+            let msg =
+              "internal error: failed to recover typed tree from tree-sitter's \
+               untyped tree"
+            in
+            ResError (Exception.trace (Failure msg))
+        | Some ast, None -> ResOk (ast, stat, res.errors)
+        | None, Some ts_error ->
+            let e = error_of_tree_sitter_error ts_error in
+            Log.err (fun m ->
+                m "non-recoverable error with TreeSitter parser:\n%s"
+                  (Exception.to_string e));
+            ResError e
+        | Some ast, Some _error ->
+            Log.warn (fun m ->
+                m "partial errors (%d) with TreeSitter parser"
+                  (List.length res.errors));
+            ResPartial (ast, stat, res.errors)
+      with
+      | Time_limit.Timeout _ as e -> Exception.catch_and_reraise e
+      | exn when !debug_exn -> Exception.catch_and_reraise exn
+      | exn ->
+          let e = Exception.catch exn in
+          Log.err (fun m ->
+              m "exn (%s) with TreeSitter parser (from string)"
+                (Common.exn_to_s exn));
+          ResError e)
+
+let rec (run_str_either :
+          Fpath.t -> string -> 'ast str_parser list -> 'ast internal_result) =
+ fun file content xs ->
+  match xs with
+  | [] ->
+      ResError
+        (Exception.trace
+           (Failure (spf "no parser found for %s" (Fpath.to_string file))))
+  | p :: xs -> (
+      let res = run_str_parser p file content in
+      match res with
+      | ResOk ast -> ResOk ast
+      | ResPartial _ as partial -> (
+          let res = run_str_either file content xs in
+          match res with
+          | ResOk res -> ResOk res
+          | ResError e2 ->
+              Log.debug (fun m ->
+                  m "exn again but return Partial:\n%s" (Exception.to_string e2));
+              partial
+          | ResPartial _ ->
+              Log.debug (fun m -> m "Partial again but return first Partial");
+              partial)
+      | ResError e1 -> (
+          let res = run_str_either file content xs in
+          match res with
+          | ResOk res -> ResOk res
+          | ResPartial _ as partial ->
+              Log.debug (fun m ->
+                  m "Got now a Partial, better than exn:\n%s"
+                    (Exception.to_string e1));
+              partial
+          | ResError e2 ->
+              Log.debug (fun m ->
+                  m
+                    "exn again but return original exn:\n\
+                     --- new exn (ignored) ---\n\
+                     %s\n\
+                     --- original exn (retained) ---\n\
+                     %s"
+                    (Exception.to_string e2) (Exception.to_string e1));
+              ResError e1))
+
+let (run_from_string :
+      Fpath.t ->
+      string ->
+      'ast str_parser list ->
+      ('ast -> AST_generic.program) ->
+      Parsing_result2.t) =
+ fun file content xs fconvert ->
+  let xs =
+    match () with
+    | () when Hook.get Flag.tree_sitter_only ->
+        xs
+        |> List_.exclude (function
+             | PfffStr _ -> true
+             | TreeSitterStr _ -> false)
+    | () when Hook.get Flag.pfff_only ->
+        xs
+        |> List_.exclude (function
+             | TreeSitterStr _ -> true
+             | PfffStr _ -> false)
+    | () -> xs
+  in
+  match run_str_either file content xs with
   | ResOk (ast, stat, tolerable_errors) ->
       Parsing_result2.ok (fconvert ast) stat tolerable_errors
   | ResPartial (ast, stat, errors) ->

@@ -416,7 +416,7 @@ let check ~hook ?(has_as_metavariable = false) ?mvar_context
                failwith
                  "only expr/stmt(s)/type/pattern/annotation/field(s)/partial \
                   patterns are supported");
-    let path : Target.path = { internal_path_to_content; origin } in
+    let path : Target.path = { internal_path_to_content; origin; content = None } in
 
     (* or "Match_patterns" env, which is the environment of collecting all
        stuff which is common to each `match_rules_and_recurse`
