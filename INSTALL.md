@@ -7,6 +7,7 @@ The steps to set up and build everything are normally:
 
 ```
 $ git submodule update --init --recursive
+$ git apply patches/languages_parse_string.patch # apply patches to languages in submodules
 $ make setup       # meant to be run infrequently, may not be sufficient
 $ make             # routine build
 $ make test        # test everything
