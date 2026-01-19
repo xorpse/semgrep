@@ -110,35 +110,62 @@ let handle_scan
               | Error exn ->
                   P.make_internal_error id (Printexc.to_string exn)
 
-(* Handle the 'initialize' method *)
-let handle_initialize
+(* Handle the 'create-session' method *)
+let handle_create_session
     (config : server_config)
     (id : P.request_id)
     (params : Yojson.Safe.t option)
     : P.response =
-  match P.parse_initialize_params params with
+  match P.parse_create_session_params params with
   | Error err -> P.make_error_response id err
-  | Ok init_params ->
-      let rules_result =
-        match init_params.rules_file, init_params.rules_json with
-        | Some file_path, _ ->
-            Scan_handler.load_rules_from_file (Fpath.v file_path)
-        | None, Some json ->
-            Scan_handler.parse_rules_from_json json
-        | None, None ->
-            Error "Must specify either 'rules_file' or 'rules'"
-      in
-      match rules_result with
-      | Error msg -> P.make_scan_error id msg
-      | Ok rules ->
-          Server_state.add_session config.state init_params.session_id rules;
-          Logs.info (fun m ->
-              m "Initialized session '%s' with %d rules"
-                init_params.session_id (List.length rules));
-          P.make_success_response id (`Assoc [
-              ("session_id", `String init_params.session_id);
-              ("rules_count", `Int (List.length rules));
-            ])
+  | Ok create_params ->
+      (* Ensure we have room for a new session *)
+      if not (Server_state.ensure_session_capacity config.state) then
+        P.make_error_response id {
+          P.code = P.Error_code.internal_error;
+          message = "Cannot create session: max sessions limit reached and no sessions can be evicted";
+          data = None;
+        }
+      else
+        let rules_result =
+          match create_params.rules_file, create_params.rules_json with
+          | Some file_path, _ ->
+              Scan_handler.load_rules_from_file (Fpath.v file_path)
+          | None, Some json ->
+              Scan_handler.parse_rules_from_json json
+          | None, None ->
+              Error "Must specify either 'rules_file' or 'rules'"
+        in
+        match rules_result with
+        | Error msg -> P.make_scan_error id msg
+        | Ok rules ->
+            Server_state.add_session config.state create_params.session_id rules;
+            Logs.info (fun m ->
+                m "Created session '%s' with %d rules"
+                  create_params.session_id (List.length rules));
+            P.make_success_response id (`Assoc [
+                ("session_id", `String create_params.session_id);
+                ("rules_count", `Int (List.length rules));
+              ])
+
+(* Handle the 'destroy-session' method *)
+let handle_destroy_session
+    (config : server_config)
+    (id : P.request_id)
+    (params : Yojson.Safe.t option)
+    : P.response =
+  match P.parse_destroy_session_params params with
+  | Error err -> P.make_error_response id err
+  | Ok destroy_params ->
+      if Server_state.has_session config.state destroy_params.session_id then begin
+        Server_state.remove_session config.state destroy_params.session_id;
+        Logs.info (fun m -> m "Destroyed session '%s'" destroy_params.session_id);
+        P.make_success_response id (`Assoc [
+            ("destroyed", `Bool true);
+            ("session_id", `String destroy_params.session_id);
+          ])
+      end else
+        P.make_session_not_found id destroy_params.session_id
 
 (* Handle the 'shutdown' method *)
 let handle_shutdown
@@ -165,10 +192,12 @@ let handle_status
       ("status", `String "running");
       ("total_requests", `Int requests);
       ("total_scans", `Int scans);
-      ("sessions", `List (List.map (fun (id, created_at) ->
+      ("sessions", `List (List.map (fun (info : Server_state.session_info) ->
            `Assoc [
-             ("id", `String id);
-             ("created_at", `Float created_at);
+             ("id", `String info.id);
+             ("created_at", `Float info.created_at);
+             ("last_accessed_at", `Float info.last_accessed_at);
+             ("rules_count", `Int info.rules_count);
            ]) sessions));
     ])
 
@@ -180,7 +209,8 @@ let handle_request
   Server_state.record_request config.state;
   match request.method_ with
   | "scan" -> handle_scan config request.id request.params
-  | "initialize" -> handle_initialize config request.id request.params
+  | "create-session" -> handle_create_session config request.id request.params
+  | "destroy-session" -> handle_destroy_session config request.id request.params
   | "shutdown" -> handle_shutdown config request.id
   | "status" -> handle_status config request.id
   | _ -> P.make_method_not_found request.id request.method_
@@ -218,12 +248,34 @@ let handle_connection (config : server_config) (flow : _ Eio.Net.stream_socket) 
           m "Error handling connection: %s" (Printexc.to_string e))
 
 (*****************************************************************************)
+(* Session cleanup *)
+(*****************************************************************************)
+
+(* How often to check for stale sessions (in seconds) *)
+let cleanup_interval = 60.0
+
+(* Background fiber that periodically evicts stale sessions *)
+let run_cleanup_fiber
+    ~(clock : _ Eio.Time.clock)
+    ~(state : Server_state.t)
+    : unit =
+  while not (Server_state.is_shutdown_requested state) do
+    Eio.Time.sleep clock cleanup_interval;
+    if not (Server_state.is_shutdown_requested state) then begin
+      let evicted = Server_state.evict_stale_sessions state in
+      if evicted > 0 then
+        Logs.info (fun m -> m "Evicted %d stale session(s)" evicted)
+    end
+  done
+
+(*****************************************************************************)
 (* Server entry point *)
 (*****************************************************************************)
 
 let run_server
     ~(sw : Eio.Switch.t)
     ~(net : _ Eio.Net.t)
+    ~(clock : _ Eio.Time.clock)
     ~(transport : Scan_server_CLI.transport)
     ~(config : server_config)
     : unit =
@@ -245,6 +297,10 @@ let run_server
         Logs.info (fun m -> m "Starting Unix socket server on %s" socket_path);
         Eio.Net.listen net ~sw ~backlog:128 ~reuse_addr:true addr
   in
+
+  (* Start the cleanup fiber in the background *)
+  Eio.Fiber.fork ~sw (fun () ->
+      run_cleanup_fiber ~clock ~state:config.state);
 
   (* Accept loop *)
   while not (Server_state.is_shutdown_requested config.state) do

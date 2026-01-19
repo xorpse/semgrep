@@ -75,11 +75,16 @@ type scan_params = {
   session_id : string option;    (* Reference to preloaded session *)
 }
 
-(* Initialize request parameters *)
-type initialize_params = {
+(* Create-session request parameters *)
+type create_session_params = {
   session_id : string;
   rules_file : string option;
   rules_json : Yojson.Safe.t option;  (* Rules directly as JSON *)
+}
+
+(* Destroy-session request parameters *)
+type destroy_session_params = {
+  session_id : string;
 }
 
 (* Scan result match *)
@@ -209,12 +214,12 @@ let parse_scan_params (params : Yojson.Safe.t option) : (scan_params, error) Res
         data = None;
       }
 
-let parse_initialize_params (params : Yojson.Safe.t option) : (initialize_params, error) Result.t =
+let parse_create_session_params (params : Yojson.Safe.t option) : (create_session_params, error) Result.t =
   match params with
   | None ->
       Error {
         code = Error_code.invalid_params;
-        message = "Missing params for initialize request";
+        message = "Missing params for create-session request";
         data = None;
       }
   | Some (`Assoc fields) ->
@@ -235,6 +240,35 @@ let parse_initialize_params (params : Yojson.Safe.t option) : (initialize_params
          if Option.is_none rules_file && Option.is_none rules_json then
            raise (Invalid_argument "Must specify either 'rules_file' or 'rules'");
          Ok { session_id; rules_file; rules_json }
+       with Invalid_argument msg ->
+         Error {
+           code = Error_code.invalid_params;
+           message = msg;
+           data = None;
+         })
+  | Some _ ->
+      Error {
+        code = Error_code.invalid_params;
+        message = "Params must be a JSON object";
+        data = None;
+      }
+
+let parse_destroy_session_params (params : Yojson.Safe.t option) : (destroy_session_params, error) Result.t =
+  match params with
+  | None ->
+      Error {
+        code = Error_code.invalid_params;
+        message = "Missing params for destroy-session request";
+        data = None;
+      }
+  | Some (`Assoc fields) ->
+      (try
+         let session_id =
+           match List.assoc_opt "session_id" fields with
+           | Some (`String s) -> s
+           | _ -> raise (Invalid_argument "Missing or invalid 'session_id' parameter")
+         in
+         Ok { session_id }
        with Invalid_argument msg ->
          Error {
            code = Error_code.invalid_params;

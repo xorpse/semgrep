@@ -33,6 +33,7 @@
 type session = {
   rules : Rule.t list;
   created_at : float;
+  mutable last_accessed_at : float;
 }
 
 (* Server state *)
@@ -47,6 +48,10 @@ type t = {
 
   (* Default timeout for scans *)
   default_timeout : float;
+
+  (* Session management *)
+  session_ttl : float option;  (* None = no expiration, Some seconds = idle timeout *)
+  max_sessions : int option;   (* None = unlimited, Some n = max concurrent sessions *)
 
   (* Statistics *)
   mutable total_requests : int;
@@ -65,12 +70,14 @@ let default_session_id = "_default"
 (* Creation *)
 (*****************************************************************************)
 
-let create ~default_timeout : t = {
+let create ~default_timeout ?session_ttl ?max_sessions () : t = {
   sessions = Hashtbl.create 16;
   sessions_mutex = Mutex.create ();
   shutdown_requested = false;
   shutdown_mutex = Mutex.create ();
   default_timeout;
+  session_ttl;
+  max_sessions;
   total_requests = 0;
   total_scans = 0;
   stats_mutex = Mutex.create ();
@@ -83,18 +90,33 @@ let create ~default_timeout : t = {
 let add_session (state : t) (session_id : string) (rules : Rule.t list) : unit =
   Mutex.lock state.sessions_mutex;
   Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
-      let session = { rules; created_at = Unix.gettimeofday () } in
+      let now = Unix.gettimeofday () in
+      let session = { rules; created_at = now; last_accessed_at = now } in
       Hashtbl.replace state.sessions session_id session)
 
-let get_session (state : t) (session_id : string) : session option =
+let get_session ?(touch = false) (state : t) (session_id : string) : session option =
   Mutex.lock state.sessions_mutex;
   Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
-      Hashtbl.find_opt state.sessions session_id)
+      match Hashtbl.find_opt state.sessions session_id with
+      | Some session ->
+          if touch then session.last_accessed_at <- Unix.gettimeofday ();
+          Some session
+      | None -> None)
 
 let get_session_rules (state : t) (session_id : string) : Rule.t list option =
-  match get_session state session_id with
+  (* Touch the session on access to update last_accessed_at *)
+  match get_session ~touch:true state session_id with
   | Some session -> Some session.rules
   | None -> None
+
+let touch_session (state : t) (session_id : string) : bool =
+  Mutex.lock state.sessions_mutex;
+  Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
+      match Hashtbl.find_opt state.sessions session_id with
+      | Some session ->
+          session.last_accessed_at <- Unix.gettimeofday ();
+          true
+      | None -> false)
 
 let remove_session (state : t) (session_id : string) : unit =
   Mutex.lock state.sessions_mutex;
@@ -106,11 +128,22 @@ let has_session (state : t) (session_id : string) : bool =
   Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
       Hashtbl.mem state.sessions session_id)
 
-let list_sessions (state : t) : (string * float) list =
+type session_info = {
+  id : string;
+  created_at : float;
+  last_accessed_at : float;
+  rules_count : int;
+}
+
+let list_sessions (state : t) : session_info list =
   Mutex.lock state.sessions_mutex;
   Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
-      Hashtbl.fold (fun id session acc ->
-          (id, session.created_at) :: acc
+      Hashtbl.fold (fun session_id (sess : session) acc ->
+          { id = session_id;
+            created_at = sess.created_at;
+            last_accessed_at = sess.last_accessed_at;
+            rules_count = List.length sess.rules;
+          } :: acc
         ) state.sessions [])
 
 (*****************************************************************************)
@@ -158,3 +191,69 @@ let get_stats (state : t) : int * int =
   Mutex.lock state.stats_mutex;
   Fun.protect ~finally:(fun () -> Mutex.unlock state.stats_mutex) (fun () ->
       (state.total_requests, state.total_scans))
+
+(*****************************************************************************)
+(* Session cleanup *)
+(*****************************************************************************)
+
+let session_count (state : t) : int =
+  Mutex.lock state.sessions_mutex;
+  Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
+      Hashtbl.length state.sessions)
+
+(* Evict sessions that have been idle longer than the TTL.
+   The _default session is never evicted. *)
+let evict_stale_sessions (state : t) : int =
+  match state.session_ttl with
+  | None -> 0
+  | Some ttl ->
+      Mutex.lock state.sessions_mutex;
+      Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
+          let now = Unix.gettimeofday () in
+          let to_remove =
+            Hashtbl.fold (fun id (sess : session) acc ->
+                if id <> default_session_id &&
+                   now -. sess.last_accessed_at > ttl then
+                  id :: acc
+                else
+                  acc
+              ) state.sessions []
+          in
+          List.iter (Hashtbl.remove state.sessions) to_remove;
+          List.length to_remove)
+
+(* Evict the least recently used session (excluding _default) to make room.
+   Returns true if a session was evicted. *)
+let evict_lru_session (state : t) : bool =
+  Mutex.lock state.sessions_mutex;
+  Fun.protect ~finally:(fun () -> Mutex.unlock state.sessions_mutex) (fun () ->
+      let lru =
+        Hashtbl.fold (fun id (sess : session) acc ->
+            if id = default_session_id then acc
+            else match acc with
+              | None -> Some (id, sess.last_accessed_at)
+              | Some (_, oldest_time) ->
+                  if sess.last_accessed_at < oldest_time then
+                    Some (id, sess.last_accessed_at)
+                  else acc
+          ) state.sessions None
+      in
+      match lru with
+      | Some (id, _) ->
+          Hashtbl.remove state.sessions id;
+          true
+      | None -> false)
+
+(* Check if adding a new session would exceed max_sessions limit.
+   If so, evict LRU sessions until there's room.
+   Returns true if there's room for a new session. *)
+let ensure_session_capacity (state : t) : bool =
+  match state.max_sessions with
+  | None -> true
+  | Some max ->
+      let rec make_room () =
+        if session_count state < max then true
+        else if evict_lru_session state then make_room ()
+        else false
+      in
+      make_room ()

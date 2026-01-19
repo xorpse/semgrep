@@ -24,6 +24,8 @@ type conf = {
   workers : int;
   rules_file : Fpath.t option;
   timeout : float;
+  session_ttl : float option;   (** Session idle timeout in seconds. None = no expiration *)
+  max_sessions : int option;    (** Max concurrent sessions. None = unlimited *)
   common : CLI_common.conf;
 }
 [@@deriving show]

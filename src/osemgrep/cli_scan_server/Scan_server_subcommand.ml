@@ -39,11 +39,18 @@ let run_conf (caps : < caps ; .. >) (conf : Scan_server_CLI.conf) : Exit_code.t 
   @@ fun () ->
   Logs.debug (fun m -> m "Starting semgrep-serve");
   Logs.info (fun m ->
-      m "Configuration: workers=%d, timeout=%.1f"
-        conf.workers conf.timeout);
+      m "Configuration: workers=%d, timeout=%.1f, session_ttl=%s, max_sessions=%s"
+        conf.workers conf.timeout
+        (match conf.session_ttl with None -> "none" | Some t -> Printf.sprintf "%.0fs" t)
+        (match conf.max_sessions with None -> "unlimited" | Some n -> string_of_int n));
 
   (* Create server state *)
-  let state = Server_state.create ~default_timeout:conf.timeout in
+  let state = Server_state.create
+      ~default_timeout:conf.timeout
+      ?session_ttl:conf.session_ttl
+      ?max_sessions:conf.max_sessions
+      ()
+  in
 
   (* Load default rules if specified *)
   (match conf.rules_file with
@@ -81,9 +88,11 @@ let run_conf (caps : < caps ; .. >) (conf : Scan_server_CLI.conf) : Exit_code.t 
 
   (* Start the server *)
   let net = Eio.Stdenv.net env in
+  let clock = Eio.Stdenv.clock env in
   Scan_server.run_server
     ~sw
     ~net
+    ~clock
     ~transport:conf.transport
     ~config:server_config;
 

@@ -40,6 +40,8 @@ type conf = {
   workers : int;
   rules_file : Fpath.t option;
   timeout : float;
+  session_ttl : float option;   (* None = no expiration, Some secs = idle timeout *)
+  max_sessions : int option;    (* None = unlimited, Some n = max concurrent *)
   common : CLI_common.conf;
 }
 [@@deriving show]
@@ -106,6 +108,26 @@ let o_timeout : float Term.t =
   in
   Arg.value (Arg.opt Arg.float 30.0 info)
 
+(* Session management configuration *)
+
+let o_session_ttl : float option Term.t =
+  let info =
+    Arg.info [ "session-ttl" ]
+      ~docv:"SECONDS"
+      ~doc:"Session idle timeout in seconds. Sessions not accessed within this time \
+            are automatically cleaned up. Set to 0 to disable expiration (default: 3600)."
+  in
+  Arg.value (Arg.opt (Arg.some Arg.float) (Some 3600.0) info)
+
+let o_max_sessions : int option Term.t =
+  let info =
+    Arg.info [ "max-sessions" ]
+      ~docv:"N"
+      ~doc:"Maximum number of concurrent sessions. When exceeded, the least recently \
+            used session is evicted. Set to 0 for unlimited (default: 100)."
+  in
+  Arg.value (Arg.opt (Arg.some Arg.int) (Some 100) info)
+
 (*****************************************************************************)
 (* Command-line parsing: turn argv into conf *)
 (*****************************************************************************)
@@ -113,7 +135,7 @@ let o_timeout : float Term.t =
 let cmdline_term : conf Term.t =
   (* Parameters must be in alphabetic order to match the order
      of the corresponding '$ o_xx $' further below! *)
-  let combine common host port rules socket timeout workers =
+  let combine common host max_sessions port rules session_ttl socket timeout workers =
     (* Determine transport based on provided options *)
     let transport =
       match (port, socket) with
@@ -142,13 +164,31 @@ let cmdline_term : conf Term.t =
     in
     (* Convert rules string to Fpath if specified *)
     let rules_file = Option.map Fpath.v rules in
-    { transport; workers; rules_file; timeout; common }
+    (* Normalize session_ttl: 0 means no expiration *)
+    let session_ttl =
+      match session_ttl with
+      | Some 0.0 -> None
+      | Some ttl when ttl < 0.0 ->
+          Error.abort (Printf.sprintf "Invalid session-ttl: %f (must be >= 0)" ttl)
+      | other -> other
+    in
+    (* Normalize max_sessions: 0 means unlimited *)
+    let max_sessions =
+      match max_sessions with
+      | Some 0 -> None
+      | Some n when n < 0 ->
+          Error.abort (Printf.sprintf "Invalid max-sessions: %d (must be >= 0)" n)
+      | other -> other
+    in
+    { transport; workers; rules_file; timeout; session_ttl; max_sessions; common }
   in
   Term.(const combine
         $ CLI_common.o_common
         $ o_host
+        $ o_max_sessions
         $ o_port
         $ o_rules
+        $ o_session_ttl
         $ o_socket
         $ o_timeout
         $ o_workers)
@@ -163,15 +203,19 @@ let man : Cmdliner.Manpage.block list =
         domains for high throughput.";
     `P "The server accepts the following JSON-RPC methods:";
     `I ("$(b,scan)", "Scan code from a string with specified rules");
-    `I ("$(b,initialize)", "Preload rules for a named session");
+    `I ("$(b,create-session)", "Create a named session with preloaded rules");
+    `I ("$(b,destroy-session)", "Remove a session and free its resources");
+    `I ("$(b,status)", "Get server status and list active sessions");
     `I ("$(b,shutdown)", "Gracefully shut down the server");
+    `P "Sessions are automatically cleaned up after being idle for --session-ttl \
+        seconds. The _default session (created with --rules) is never expired.";
     `S Cmdliner.Manpage.s_examples;
     `P "Start server on TCP port 9876:";
     `Pre "    semgrep serve --port 9876 --rules rules.yaml";
     `P "Start server on Unix socket:";
     `Pre "    semgrep serve --socket /tmp/semgrep.sock";
-    `P "Start with custom worker count:";
-    `Pre "    semgrep serve --port 9876 --workers 4";
+    `P "Start with custom worker count and session limits:";
+    `Pre "    semgrep serve --port 9876 --workers 4 --session-ttl 1800 --max-sessions 50";
   ]
   @ CLI_common.help_page_bottom
 

@@ -33,9 +33,10 @@
 }}
 ```
 
-### `initialize`
+### `create-session`
+Create a named session with preloaded rules. Sessions cache parsed rules for efficient repeated scans.
 ```json
-{"jsonrpc":"2.0","id":2,"method":"initialize","params":{
+{"jsonrpc":"2.0","id":2,"method":"create-session","params":{
   "session_id": "my-session",
   "rules_file": "/path/to/rules.yaml"
 }}
@@ -44,17 +45,52 @@ Or use `"rules": {...}` for inline JSON. One of `rules_file` or `rules` required
 
 **Response:** `{"jsonrpc":"2.0","id":2,"result":{"session_id":"...","rules_count":N}}`
 
+### `destroy-session`
+Remove a session and free its resources.
+```json
+{"jsonrpc":"2.0","id":3,"method":"destroy-session","params":{
+  "session_id": "my-session"
+}}
+```
+
+**Response:** `{"jsonrpc":"2.0","id":3,"result":{"destroyed":true,"session_id":"..."}}`
+
 ### `status`
 ```json
-{"jsonrpc":"2.0","id":3,"method":"status"}
+{"jsonrpc":"2.0","id":4,"method":"status"}
 ```
-**Response:** `{"jsonrpc":"2.0","id":3,"result":{"status":"running","total_requests":N,"total_scans":N,"sessions":[{"id":"...","created_at":1234.5}]}}`
+**Response:**
+```json
+{"jsonrpc":"2.0","id":4,"result":{
+  "status":"running",
+  "total_requests":N,
+  "total_scans":N,
+  "sessions":[{
+    "id":"...",
+    "created_at":1234.5,
+    "last_accessed_at":1234.5,
+    "rules_count":N
+  }]
+}}
+```
 
 ### `shutdown`
 ```json
-{"jsonrpc":"2.0","id":4,"method":"shutdown"}
+{"jsonrpc":"2.0","id":5,"method":"shutdown"}
 ```
-**Response:** `{"jsonrpc":"2.0","id":4,"result":{"message":"Server shutting down","total_requests":N,"total_scans":N}}`
+**Response:** `{"jsonrpc":"2.0","id":5,"result":{"message":"Server shutting down","total_requests":N,"total_scans":N}}`
+
+---
+
+## Session Management
+
+Sessions are automatically managed by the server:
+
+- **Idle Timeout**: Sessions not accessed within `--session-ttl` seconds are automatically cleaned up. Default: 3600 seconds (1 hour). Set to 0 to disable.
+- **Max Sessions**: When `--max-sessions` limit is reached, the least recently used session is evicted to make room. Default: 100. Set to 0 for unlimited.
+- **Protected Session**: The `_default` session (created with `--rules`) is never automatically evicted.
+
+Cleanup runs every 60 seconds in a background fiber.
 
 ---
 
@@ -80,6 +116,9 @@ semgrep serve --port 9876 --rules rules.yaml --workers 4 --timeout 30.0
 
 # Unix socket server
 semgrep serve --socket /tmp/semgrep.sock --rules rules.yaml
+
+# With session management options
+semgrep serve --port 9876 --session-ttl 1800 --max-sessions 50
 ```
 
 ### Options
@@ -89,3 +128,5 @@ semgrep serve --socket /tmp/semgrep.sock --rules rules.yaml
 - `--rules`, `-c`: Preload rules file into default session
 - `--workers`, `-j`: Worker count (default: CPU cores - 1)
 - `--timeout`: Scan timeout in seconds (default: 30.0)
+- `--session-ttl`: Session idle timeout in seconds (default: 3600, 0 = no expiration)
+- `--max-sessions`: Maximum concurrent sessions (default: 100, 0 = unlimited)
