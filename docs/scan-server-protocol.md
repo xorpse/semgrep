@@ -108,25 +108,80 @@ Cleanup runs every 60 seconds in a background fiber.
 
 ---
 
-## CLI Usage
+## Starting the Server
+
+The scan server is an **experimental** feature and requires the `--experimental` flag.
+
+### From Installed Semgrep
 
 ```bash
 # TCP server
-semgrep serve --port 9876 --rules rules.yaml --workers 4 --timeout 30.0
+semgrep serve --experimental --port 9876 --rules rules.yaml
 
 # Unix socket server
-semgrep serve --socket /tmp/semgrep.sock --rules rules.yaml
+semgrep serve --experimental --socket /tmp/semgrep.sock --rules rules.yaml
 
-# With session management options
-semgrep serve --port 9876 --session-ttl 1800 --max-sessions 50
+# With all options
+semgrep serve --experimental --port 9876 --rules rules.yaml \
+    --workers 4 --timeout 30.0 --session-ttl 1800 --max-sessions 50
 ```
 
-### Options
-- `--port`, `-p`: TCP port (1-65535)
-- `--socket`, `-s`: Unix socket path
-- `--host`: Host to bind (default: 127.0.0.1)
-- `--rules`, `-c`: Preload rules file into default session
-- `--workers`, `-j`: Worker count (default: CPU cores - 1)
-- `--timeout`: Scan timeout in seconds (default: 30.0)
-- `--session-ttl`: Session idle timeout in seconds (default: 3600, 0 = no expiration)
-- `--max-sessions`: Maximum concurrent sessions (default: 100, 0 = unlimited)
+### From Development Build
+
+When running from a development build, you need to set the library path for tree-sitter:
+
+```bash
+# Set library path and run via dune
+export LD_LIBRARY_PATH=/path/to/semgrep/libs/ocaml-tree-sitter-core/tree-sitter-0.22.6/lib:$LD_LIBRARY_PATH
+
+# Run the server
+dune exec -- osemgrep serve --experimental --port 9876 --rules rules.yaml -j 1
+
+# Or run the built binary directly
+/path/to/semgrep/_build/install/default/bin/osemgrep \
+    serve --experimental --port 9876 --rules rules.yaml -j 1
+```
+
+### Server Options
+
+| Option | Description |
+|--------|-------------|
+| `--port`, `-p` | TCP port (1-65535) |
+| `--socket`, `-s` | Unix socket path |
+| `--host` | Host to bind (default: 127.0.0.1) |
+| `--rules`, `-c` | Preload rules file into `_default` session |
+| `--workers`, `-j` | Worker count (default: CPU cores - 1) |
+| `--timeout` | Scan timeout in seconds (default: 30.0) |
+| `--session-ttl` | Session idle timeout in seconds (default: 3600, 0 = no expiration) |
+| `--max-sessions` | Maximum concurrent sessions (default: 100, 0 = unlimited)
+
+---
+
+## CLI Client
+
+A standalone Python CLI client is available for testing:
+
+```bash
+# Setup (one-time)
+cd scripts
+uv venv .venv && uv pip install click pyyaml
+
+# Activate
+source scripts/.venv/bin/activate
+
+# Commands
+python scripts/scan_server_client.py status --port 9876
+python scripts/scan_server_client.py scan --port 9876 \
+    --content "eval(input())" --filename test.py --language python \
+    --session-id _default
+python scripts/scan_server_client.py create-session --port 9876 \
+    --session-id my-session --rules-file rules.yaml
+python scripts/scan_server_client.py destroy-session --port 9876 \
+    --session-id my-session
+python scripts/scan_server_client.py shutdown --port 9876
+
+# Options
+#   --json       Output as JSON
+#   --verbose    Show JSON-RPC messages
+#   --socket     Use Unix socket instead of TCP port
+```
